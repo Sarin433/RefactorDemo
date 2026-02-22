@@ -216,3 +216,101 @@ Order_Details
 - อย่าเพิ่ม framework ใหญ่หรือ tooling ที่ทำให้โปรเจกต์ "ทันสมัย"
 - อย่าใช้ ORM หรือ query builder
 - ควรมีหน้า HTML อย่างง่าย — ไม่ใช่ pure API
+
+---
+
+## โจทย์ที่ต้องการให้ Refactor ปรับปรุง Codebase นี้คือ
+
+เป้าหมายของการ Refactor คือ **ยกระดับ codebase นี้ให้เป็น PHP สมัยใหม่** โดยใช้ tech stack ที่เป็น best practice ปัจจุบัน และให้ความสำคัญกับ **ความปลอดภัยของโค้ดสูงสุด** โดยอ้างอิง OWASP Top 10 2025
+
+---
+
+### Target Tech Stack (หลัง Refactor)
+
+| Layer | Technology |
+|---|---|
+| Language | PHP 8.3 (LTS) |
+| Framework | Laravel (latest stable) |
+| ORM | Eloquent ORM |
+| Database | MySQL 8.x |
+| Authentication | Laravel Sanctum / Laravel Breeze |
+| Frontend | Blade Templates + Tailwind CSS (หรือ Bootstrap 5) |
+| Validation | Laravel Form Request Validation |
+| Password Hashing | `bcrypt` / `argon2id` ผ่าน `Hash::make()` |
+| Container | Docker + Docker Compose |
+
+---
+
+### หลักการ Refactor
+
+#### 1) โครงสร้างโค้ด (Architecture)
+
+- แยก **Controller / Service / Model** ให้ชัดเจน ตาม MVC ของ Laravel
+- ใช้ **Eloquent Model** แทน raw mysqli string concat
+- ใช้ **Form Request** สำหรับ validation ทุก input ก่อนถึง controller
+- ใช้ **Route Model Binding** แทนการ query ด้วยมือใน controller
+- แยก business logic ออกไปใน **Service class** ไม่ให้อยู่ใน controller โดยตรง
+- ใช้ **Migration** แทน init.sql และ **Seeder / Factory** แทน seed.php
+
+#### 2) ความปลอดภัย — OWASP Top 10 2025
+
+แก้ไขจุดอ่อนทุกข้อที่อยู่ใน legacy code ให้ผ่านมาตรฐาน OWASP Top 10 2025:
+
+| OWASP 2025 | ช่องโหว่เดิมใน legacy code | วิธีแก้ใน Laravel |
+|---|---|---|
+| **A01 – Broken Access Control** | ทุกหน้าตรวจ session เอง ไม่มี middleware กลาง | ใช้ Laravel `auth` middleware + Gate / Policy |
+| **A02 – Cryptographic Failures** | password เก็บเป็น plain text | ใช้ `Hash::make()` (bcrypt/argon2id) + HTTPS only |
+| **A03 – Injection** | SQL injection ทุก query ด้วย string concat | ใช้ Eloquent ORM หรือ Query Builder พร้อม parameter binding เสมอ |
+| **A04 – Insecure Design** | ไม่มี rate limiting, ไม่มี account lockout | ใช้ Laravel `throttle` middleware บน login route |
+| **A05 – Security Misconfiguration** | hardcoded DB credentials ใน config.php | ใช้ `.env` + `config/database.php`; ห้าม commit `.env` |
+| **A07 – Identification & Authentication Failures** | ไม่มี session regeneration หลัง login | ใช้ `session()->regenerate()` หลัง authenticate สำเร็จ |
+| **A08 – Software & Data Integrity Failures** | ไม่มี CSRF token ใน form ใด ๆ | ใช้ `@csrf` Blade directive ทุก form (Laravel เปิดใช้อัตโนมัติ) |
+| **A09 – Security Logging & Monitoring Failures** | ไม่มี log เลย | ใช้ Laravel `Log` facade บันทึก login attempt และ order action |
+| **A10 – Server-Side Request Forgery** | ไม่มีการกรอง user-supplied URL | ตรวจสอบและ whitelist URL ก่อน HTTP request ทุกครั้ง |
+
+#### 3) Validation & Input Handling
+
+- **ทุก input** ต้องผ่าน Form Request validation ก่อนเสมอ — ห้ามอ่าน `$request->input()` ใน controller โดยไม่ validate
+- ใช้ Laravel validation rule: `required`, `email`, `min`, `max`, `integer`, `exists`, `unique` ตามความเหมาะสม
+- **ห้าม** แสดง stack trace หรือ DB error ต่อ user — ใช้ custom error page (`APP_DEBUG=false` ใน production)
+
+#### 4) Authentication & Session
+
+- ใช้ Laravel built-in authentication (Breeze หรือ Fortify)
+- บังคับ `session()->regenerate()` ทุกครั้งที่ login สำเร็จ (ป้องกัน Session Fixation)
+- ตั้ง session lifetime ให้เหมาะสม และใช้ `secure`, `httponly`, `samesite=strict` บน session cookie
+- ใช้ **Role-based access control** ผ่าน Gate หรือ Policy — ไม่ตรวจ role ด้วย `if ($role == 'admin')` กระจัดกระจาย
+
+#### 5) Database
+
+- ใช้ **Eloquent ORM** หรือ **Query Builder** เท่านั้น — ห้าม raw SQL ที่มี string interpolation
+- ถ้าจำเป็นต้องใช้ raw SQL ให้ใช้ `DB::select('... WHERE id = ?', [$id])` (parameter binding เสมอ)
+- ใช้ **Migration** สร้าง schema และ **Seeder** สำหรับ seed data
+- Foreign key constraint ต้องครบและเปิดใช้งาน
+
+#### 6) Code Quality
+
+- ทุก class/method มี type hint (PHP 8 union types, return types)
+- ใช้ `readonly` property และ named argument ที่ PHP 8.1+ รองรับ ตามความเหมาะสม
+- ทำ **unit test** และ **feature test** ด้วย PHPUnit / Pest สำหรับ critical path (login, order creation, bulk update)
+- ใช้ **Laravel Pint** หรือ PHP-CS-Fixer สำหรับ code style
+
+---
+
+### Refactor Checklist
+
+- [ ] ย้าย credentials ทั้งหมดออกจาก source code → `.env`
+- [ ] เปลี่ยน plain-text password เป็น `Hash::make()` / `Hash::check()`
+- [ ] เปลี่ยนทุก query เป็น Eloquent หรือ Query Builder (ไม่มี string concat SQL)
+- [ ] เพิ่ม `@csrf` ทุก form
+- [ ] เพิ่ม Form Request validation ทุก POST endpoint
+- [ ] เพิ่ม `auth` middleware ทุก route ที่ต้อง login
+- [ ] เพิ่ม `role` middleware แยก user / admin
+- [ ] แก้ N+1 query ด้วย Eloquent `with()` (eager loading)
+- [ ] เพิ่ม `throttle` middleware บน login route
+- [ ] เพิ่ม `session()->regenerate()` หลัง login
+- [ ] ลบ seed logic ออกจาก request cycle → ย้ายไป Laravel Seeder
+- [ ] เพิ่ม logging สำหรับ auth event และ order action
+- [ ] ตั้ง `APP_DEBUG=false` และ custom error page สำหรับ production
+- [ ] ตรวจสอบ stock server-side ก่อน INSERT Order_Details
+- [ ] ใช้ `Str::uuid()` หรือ database sequence แทน `rand()` สำหรับ order_number
