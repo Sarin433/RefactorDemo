@@ -1,0 +1,28 @@
+version: '3.7'
+
+services:
+  app:
+    build: .
+    ports:
+      - "8080:80"
+    volumes:
+      - ./public:/var/www/html
+    depends_on:
+      - db
+    networks:
+      - omsnet
+
+  db:
+    image: mysql:5.7
+    environment:
+      MYSQL_DATABASE: omsdb
+      MYSQL_USER: omsuser
+      MYSQL_PASSWORD: omspass
+      MYSQL_ROOT_PASSWORD: rootpass
+    volumes:
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - omsnet
+
+networks:
+  omsnet:
