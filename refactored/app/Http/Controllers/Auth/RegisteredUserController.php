@@ -3,13 +3,12 @@
 namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Auth\RegisterUserRequest;
 use App\Models\User;
 use Illuminate\Auth\Events\Registered;
 use Illuminate\Http\RedirectResponse;
-use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Validation\Rules;
 use Illuminate\View\View;
 
 class RegisteredUserController extends Controller
@@ -27,22 +26,16 @@ class RegisteredUserController extends Controller
      *
      * @throws \Illuminate\Validation\ValidationException
      */
-    public function store(Request $request): RedirectResponse
+    public function store(RegisterUserRequest $request): RedirectResponse
     {
-        $request->validate([
-            'email'            => ['required', 'string', 'email', 'max:255', 'unique:users'],
-            'first_name'       => ['required', 'string', 'max:100'],
-            'last_name'        => ['required', 'string', 'max:100'],
-            'phone'            => ['required', 'string', 'max:20'],
-            'password'         => ['required', 'confirmed', Rules\Password::defaults()],
-        ]);
+        $validated = $request->validated();
 
         $user = User::create([
-            'email'      => $request->email,
-            'first_name' => $request->first_name,
-            'last_name'  => $request->last_name,
-            'phone'      => $request->phone,
-            'password'   => Hash::make($request->password), // OWASP A02: bcrypt hash
+            'email'      => $validated['email'],
+            'first_name' => $validated['first_name'],
+            'last_name'  => $validated['last_name'],
+            'phone'      => $validated['phone'],
+            'password'   => Hash::make($validated['password']), // OWASP A02: bcrypt hash
             'role'       => 'user',
         ]);
 
