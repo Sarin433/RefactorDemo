@@ -1,10 +1,11 @@
-FROM php:8.3-apache
+FROM php:8.4-apache
 
 # Install required PHP extensions
 RUN apt-get update && apt-get install -y \
     libpng-dev \
     libzip-dev \
     libxml2-dev \
+    libonig-dev \
     unzip \
     git \
     && docker-php-ext-install \
@@ -41,4 +42,10 @@ RUN chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cac
 RUN echo "opcache.enable=1\nopcache.memory_consumption=128\nopcache.interned_strings_buffer=8\nopcache.max_accelerated_files=4000\nopcache.revalidate_freq=2" \
     > /usr/local/etc/php/conf.d/opcache.ini
 
+# Copy entrypoint script
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+
 EXPOSE 80
+
+ENTRYPOINT ["docker-entrypoint.sh"]
